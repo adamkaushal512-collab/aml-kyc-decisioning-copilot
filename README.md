@@ -32,6 +32,11 @@ version).
 - **Evaluation:** RAGAS
 - **Observability / tracing:** Langfuse
 
+## Getting Started
+
+See [`SETUP.md`](./SETUP.md) for instructions on installing dependencies
+and running the backend and frontend locally.
+
 ## Status
 
 **Early build phase.** The pipeline architecture and problem scope are
