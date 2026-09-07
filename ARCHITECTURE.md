@@ -116,6 +116,49 @@ independent of Langfuse's operational tracing.
 | Evaluation | **RAGAS** | Scores retrieval and generation quality (e.g., context precision/recall, faithfulness) for the RAG step, independent of production traffic |
 | Observability / tracing | **Langfuse** | Traces every pipeline run stage-by-stage in real time, for debugging and monitoring — distinct from the permanent audit log in stage 8 |
 
+## Deployment
+
+**AWS is the documented production target.** No infrastructure has been
+provisioned yet — this section describes the intended deployment, not the
+current state:
+
+- **Agent services (LangGraph pipeline):** ECS/Fargate or Lambda. Fargate is
+  the likely fit for the full pipeline given multi-stage runtimes and
+  potential per-stage memory/timeout variance; Lambda remains an option for
+  lighter-weight or individually invokable stages.
+- **Storage:** RDS (PostgreSQL) with the pgvector extension, serving both
+  the policy-document embeddings (stage 5) and the pipeline's relational
+  case/audit data.
+
+The specific split between ECS/Fargate and Lambda, networking, and scaling
+configuration are open decisions to be settled during implementation.
+
+## Security & Governance
+
+- **PII handling:** Case data includes customer PII (names, IDs,
+  transaction details) that must be handled deliberately, not incidentally.
+  At minimum: encrypt PII at rest and in transit, scope access to what each
+  pipeline stage actually needs, and avoid passing raw PII into logs or
+  traces (Langfuse and stage 8's audit log) without redaction or masking
+  where the raw value isn't itself the evidence being audited.
+- **Prompt-injection defense:** Several stages (policy retrieval, hybrid
+  decisioning) put an LLM in contact with content it does not control —
+  free-text alert notes, adverse-media snippets, and retrieved policy
+  passages could all carry adversarial or malformed instructions. The
+  pipeline must treat all such content as untrusted data, not instructions:
+  keep retrieved/ingested text out of the system prompt, constrain what
+  actions an LLM stage can take as a result of what it reads (e.g., it can
+  recommend a disposition, not alter pipeline control flow or trigger side
+  effects), and validate/sanitize document text during normalization
+  (stage 2) before it reaches any LLM-facing stage.
+- **Audit-log integrity:** The audit log produced in stage 8 is the record
+  an examiner relies on to reconstruct a decision, so it must be
+  tamper-evident and immutable once written — append-only storage, no
+  update/delete path for existing entries, and a durability/retention
+  policy that outlives the case itself. This is a stronger guarantee than
+  Langfuse's operational tracing is expected to provide, which is why the
+  two are kept distinct (see stage 8).
+
 ## Known Limitations / Out of Scope for v1
 
 `DISCOVERY.md` lists **beneficial ownership analysis** and **prior-case-
