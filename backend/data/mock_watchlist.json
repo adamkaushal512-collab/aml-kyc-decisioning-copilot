@@ -1,0 +1,8 @@
+[
+  { "name": "Viktor Bramholt", "type": "sanctions", "source": "MOCK-OFAC" },
+  { "name": "Elena Kozlova-Reyes", "type": "pep", "source": "MOCK-PEP" },
+  { "name": "Dmitri Aurelian Volkov", "type": "sanctions", "source": "MOCK-UN" },
+  { "name": "Farid Al-Mansoori", "type": "sanctions", "source": "MOCK-OFAC" },
+  { "name": "Ingrid Thorne-Sallow", "type": "pep", "source": "MOCK-PEP" },
+  { "name": "Marcus Delgado-Weiss", "type": "sanctions", "source": "MOCK-EU" }
+]

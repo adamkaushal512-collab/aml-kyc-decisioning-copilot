@@ -1,0 +1,47 @@
+[
+  {
+    "case_id": "CASE-0001",
+    "customer_name": "Sarah Chen",
+    "customer_id": "CUST-10041",
+    "transaction_amount": null,
+    "transaction_type": null,
+    "case_type": "kyc_refresh",
+    "status": "open"
+  },
+  {
+    "case_id": "CASE-0002",
+    "customer_name": "James Whitfield",
+    "customer_id": "CUST-10088",
+    "transaction_amount": 4200.00,
+    "transaction_type": "ach",
+    "case_type": "transaction_alert",
+    "status": "open"
+  },
+  {
+    "case_id": "CASE-0003",
+    "customer_name": "Viktor Bramholt",
+    "customer_id": "CUST-10132",
+    "transaction_amount": 18500.00,
+    "transaction_type": "wire_transfer_international",
+    "case_type": "transaction_alert",
+    "status": "open"
+  },
+  {
+    "case_id": "CASE-0004",
+    "customer_name": "Priya Nadarajah",
+    "customer_id": "CUST-10207",
+    "transaction_amount": 4850000.00,
+    "transaction_type": "wire_transfer_international",
+    "case_type": "transaction_alert",
+    "status": "open"
+  },
+  {
+    "case_id": "CASE-0005",
+    "customer_name": "Viktor Bramhold",
+    "customer_id": "CUST-10255",
+    "transaction_amount": 92000.00,
+    "transaction_type": "wire_transfer",
+    "case_type": "kyc_refresh",
+    "status": "open"
+  }
+]
