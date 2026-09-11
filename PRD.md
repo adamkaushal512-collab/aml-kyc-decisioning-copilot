@@ -1,0 +1,29 @@
+# Product Requirements: AML/KYC Decisioning Copilot
+
+This PRD bridges [`docs/DISCOVERY_BRIEF.md`](./docs/DISCOVERY_BRIEF.md)'s
+business framing — why this use case was prioritized over the other
+candidates — and [`ARCHITECTURE.md`](./ARCHITECTURE.md)'s technical design —
+how the pipeline is actually built. It translates each core business need
+from [`DISCOVERY.md`](./DISCOVERY.md) into a functional requirement, the
+technical requirement that satisfies it, and a measurable eval criterion
+that tells us whether it's actually working.
+
+| Business Need | Functional Requirement | Technical Requirement | Eval Criteria |
+|---|---|---|---|
+| Analysts need faster case turnaround — cases currently take 30-60 minutes of manual evidence-gathering, creating backlog risk and delaying time-sensitive filings. | The pipeline must autonomously gather and synthesize case evidence (screening hits, policy guidance) and produce a decision-ready recommendation without manual assembly. | LangGraph-orchestrated pipeline (intake → entity resolution → screening → policy retrieval → scoring → decisioning → audit) that runs end-to-end per case without human intervention until the final review step. | Median case turnaround time (intake to decision-ready-for-review) reduced by >= 70% vs. the manual baseline, measured via Langfuse stage-timing traces across a representative case sample. |
+| Decisions need to be consistent across analysts — identical or near-identical cases currently receive different dispositions depending on who reviews them. | Given the same case inputs, the pipeline must produce the same disposition and the same class of rationale every time — determinism where policy is unambiguous, and bounded, explainable variance where judgment is required. | Hybrid rule + ML decision agent: deterministic policy rules handle unambiguous cases (e.g., confirmed sanctions match → auto-escalate); an LLM-based judgment handles nuanced cases, constrained to reason only over retrieved policy passages and screening results (no free-form policy interpretation). | >= 95% exact disposition agreement across repeated runs of the same case (temperature-controlled determinism check); inter-case consistency (same risk profile → same disposition) validated against a labeled golden set with >= 90% agreement. |
+| Every decision needs to be defensible/auditable to an examiner — analysts and auditors currently have to reconstruct undocumented reasoning after the fact. | Every decision must ship with a rationale in which each material claim is traceable to a specific piece of evidence the pipeline actually consulted, and the full case trace must be permanently and immutably recorded. | Decision agent has a mandatory citation field structurally tying each claim to a screening hit or retrieved policy passage; append-only audit log (pipeline stage 8) persists the full trace independent of Langfuse's operational tracing. | Citation precision >= 90% on a golden set (each cited claim verified as supported by its cited source), measured via RAGAS faithfulness/context-precision scoring; 100% of decisions have a non-empty, non-null citation field and a corresponding audit-log entry — enforced as a hard gate, not a soft target. |
+| False positives from screening need to be minimized without missing real matches — high false-positive rates drive analyst fatigue and backlog, but a missed true match is a compliance failure. | The screening stage must return match confidence, not just a binary hit, so downstream stages and reviewing analysts can distinguish a near-certain match from a weak one. | Fuzzy name matching against sanctions/PEP data (v1: mock watchlist via difflib similarity scoring; production: a tuned fuzzy-matching library) with a similarity threshold calibrated against labeled outcomes, not a fixed arbitrary cutoff. | Screening false-positive rate reduced by >= 30% vs. the manual/legacy baseline at equal or better true-positive recall (recall >= 98% on a labeled match/no-match golden set) — recall is the non-negotiable floor; false-positive rate is optimized subject to it. |
+
+## Notes on Measurement
+
+- **Golden sets** referenced above are curated, labeled case sets (known
+  correct disposition, known correct citations, known true/false screening
+  matches) — not the synthetic `sample_cases.json` used for pipeline
+  development, which is illustrative rather than a validated ground truth.
+- **RAGAS** scores are computed independent of production traffic, per
+  [`ARCHITECTURE.md`](./ARCHITECTURE.md)'s Supporting Infrastructure section.
+- These eval criteria correspond directly to the target success metrics in
+  [`DISCOVERY.md`](./DISCOVERY.md) (decision accuracy, citation precision,
+  screening false-positive rate, turnaround time) — this PRD is where those
+  metrics get a concrete measurement method.
