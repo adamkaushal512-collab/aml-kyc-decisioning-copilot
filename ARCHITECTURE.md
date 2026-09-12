@@ -176,3 +176,15 @@ This is a known gap, not an oversight: both require data integrations and
 matching logic beyond what v1's mock-data, single-pass pipeline supports.
 They should be revisited for v2 once the core pipeline (intake through audit
 logging) is validated end-to-end.
+
+- **Policy retrieval ranking quality** — `all-MiniLM-L6-v2` embeddings can
+  misrank semantically-close clauses. In manual testing, a query about a
+  92% sanctions match ranked the clause governing the "below 75%" case
+  above the clause governing the "90% or greater" case that actually
+  applies (see `backend/scripts/query_policy_chunks.py`). This is mitigated
+  for now by passing the top-3 retrieved chunks into the decision stage
+  rather than relying on the top-1 result alone, so the correct clause is
+  still in context even when it isn't ranked first. Reranking or a larger
+  embedding model is a candidate improvement to revisit once a golden eval
+  set exists to measure retrieval quality against (see `PRD.md`'s citation
+  precision criterion).
