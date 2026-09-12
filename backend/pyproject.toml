@@ -12,6 +12,12 @@ dependencies = [
     "pgvector",
     "ragas",
     "langfuse",
+    "sentence-transformers",
+    "rapidfuzz",
+    # Pinned: langchain-community>=0.4.2 dropped the vertexai chat-model shim
+    # that ragas 0.4.3 still imports unconditionally, which breaks `import
+    # ragas`. Unpin once ragas releases a fix.
+    "langchain-community==0.4.0",
 ]
 
 [build-system]
