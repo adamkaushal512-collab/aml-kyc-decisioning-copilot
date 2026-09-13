@@ -30,13 +30,16 @@ CLAUSE_PATTERN = re.compile(r"^\d+\.\s+", re.MULTILINE)
 
 
 def chunk_markdown(text: str) -> list[str]:
-    """Splits a policy doc into a header/preamble chunk plus one chunk per numbered clause."""
-    preamble, *clause_bodies = CLAUSE_PATTERN.split(text)
+    """Splits a policy doc into one chunk per numbered clause.
+
+    The title/scope preamble preceding the first numbered clause is
+    deliberately dropped: it carries no substantive policy content and
+    shouldn't be retrievable as the cited basis for a decision.
+    """
+    _preamble, *clause_bodies = CLAUSE_PATTERN.split(text)
     clause_numbers = CLAUSE_PATTERN.findall(text)
 
     chunks = []
-    if preamble.strip():
-        chunks.append(preamble.strip())
     for number, body in zip(clause_numbers, clause_bodies):
         clause = (number + body).strip()
         if clause:

@@ -11,7 +11,7 @@ from langgraph.graph import END, StateGraph
 
 from agents.decisioning import decide
 from agents.intake import load_case
-from agents.retrieval import retrieve_policy_snippet
+from agents.retrieval import PolicyChunk, retrieve_policy_chunks
 from agents.screening import ScreeningResult, screen_name
 from data.schema import Case
 
@@ -20,7 +20,7 @@ class PipelineState(TypedDict):
     case_id: str
     case: NotRequired[Case]
     screening_result: NotRequired[ScreeningResult]
-    policy_snippet: NotRequired[str]
+    policy_chunks: NotRequired[list[PolicyChunk]]
     decision: NotRequired[str]
 
 
@@ -35,17 +35,17 @@ def screening_node(state: PipelineState) -> dict:
     return {"screening_result": result}
 
 
-def retrieval_node(state: PipelineState) -> dict:
+async def retrieval_node(state: PipelineState) -> dict:
     screening_result = cast(ScreeningResult, state["screening_result"])
-    snippet = retrieve_policy_snippet(screening_result)
-    return {"policy_snippet": snippet}
+    chunks = await retrieve_policy_chunks(screening_result)
+    return {"policy_chunks": chunks}
 
 
 def decisioning_node(state: PipelineState) -> dict:
     case = cast(Case, state["case"])
     screening_result = cast(ScreeningResult, state["screening_result"])
-    policy_snippet = cast(str, state["policy_snippet"])
-    decision = decide(case, screening_result, policy_snippet)
+    policy_chunks = cast("list[PolicyChunk]", state["policy_chunks"])
+    decision = decide(case, screening_result, policy_chunks)
     return {"decision": decision}
 
 
@@ -65,6 +65,6 @@ def build_graph():
     return graph.compile()
 
 
-def run_pipeline(case_id: str) -> PipelineState:
+async def run_pipeline(case_id: str) -> PipelineState:
     app = build_graph()
-    return app.invoke({"case_id": case_id})
+    return await app.ainvoke({"case_id": case_id})
