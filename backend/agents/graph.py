@@ -1,6 +1,6 @@
-"""Thin-slice LangGraph pipeline: intake -> screening -> policy retrieval -> decisioning.
+"""Thin-slice LangGraph pipeline: intake -> screening -> policy retrieval -> scoring -> decisioning.
 
-Wires the 4 stages together as a LangGraph graph. Entity resolution is folded
+Wires the 5 stages together as a LangGraph graph. Entity resolution is folded
 into the screening stage for this thin slice (both operate on customer_name);
 see ARCHITECTURE.md for the full 8-stage pipeline this will grow into.
 """
@@ -13,6 +13,7 @@ from agents.decisioning import decide
 from agents.intake import load_case
 from agents.retrieval import PolicyChunk, retrieve_policy_chunks
 from agents.screening import ScreeningResult, screen_name
+from agents.scoring import RiskScore, score_case
 from data.schema import Case
 
 
@@ -21,6 +22,7 @@ class PipelineState(TypedDict):
     case: NotRequired[Case]
     screening_result: NotRequired[ScreeningResult]
     policy_chunks: NotRequired[list[PolicyChunk]]
+    risk_score: NotRequired[RiskScore]
     decision: NotRequired[str]
 
 
@@ -41,11 +43,19 @@ async def retrieval_node(state: PipelineState) -> dict:
     return {"policy_chunks": chunks}
 
 
+def scoring_node(state: PipelineState) -> dict:
+    case = cast(Case, state["case"])
+    screening_result = cast(ScreeningResult, state["screening_result"])
+    risk_score = score_case(case, screening_result)
+    return {"risk_score": risk_score}
+
+
 def decisioning_node(state: PipelineState) -> dict:
     case = cast(Case, state["case"])
     screening_result = cast(ScreeningResult, state["screening_result"])
     policy_chunks = cast("list[PolicyChunk]", state["policy_chunks"])
-    decision = decide(case, screening_result, policy_chunks)
+    risk_score = cast(RiskScore, state["risk_score"])
+    decision = decide(case, screening_result, policy_chunks, risk_score)
     return {"decision": decision}
 
 
@@ -54,12 +64,14 @@ def build_graph():
     graph.add_node("intake", intake_node)
     graph.add_node("screening", screening_node)
     graph.add_node("retrieval", retrieval_node)
+    graph.add_node("scoring", scoring_node)
     graph.add_node("decisioning", decisioning_node)
 
     graph.set_entry_point("intake")
     graph.add_edge("intake", "screening")
     graph.add_edge("screening", "retrieval")
-    graph.add_edge("retrieval", "decisioning")
+    graph.add_edge("retrieval", "scoring")
+    graph.add_edge("scoring", "decisioning")
     graph.add_edge("decisioning", END)
 
     return graph.compile()

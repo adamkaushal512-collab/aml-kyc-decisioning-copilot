@@ -188,3 +188,17 @@ logging) is validated end-to-end.
   embedding model is a candidate improvement to revisit once a golden eval
   set exists to measure retrieval quality against (see `PRD.md`'s citation
   precision criterion).
+
+- **Risk-scoring ML component's training data** — the ML half of the
+  hybrid risk-scoring agent (`agents/scoring.py`) is trained on a small
+  (90-sample) *synthetic* dataset, since no real historical case data
+  exists yet. In manual testing it doesn't perfectly recover the rule-based
+  labeling boundary on low-amount/low-similarity cases — it predicts
+  "medium" where the generating rule would say "low." This is expected
+  behavior for a linear model fit on limited synthetic data, not a
+  functional bug: the rule-based floor sits below the ML component in the
+  combination logic and only ever raises the final tier, so this
+  under-recovery on the low end doesn't produce an incorrect final
+  disposition (it can only push a "low" case to "medium," never past the
+  rule's own floor). Revisit once a real golden eval set exists per
+  `PRD.md`'s consistency criterion.
