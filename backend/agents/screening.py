@@ -1,13 +1,16 @@
 """Sanctions/PEP screening stage: screens the resolved entity against the local mock watchlist.
 
-Uses simple stdlib fuzzy string matching (difflib) as a v1 stand-in for a real
-fuzzy-matching library; see ARCHITECTURE.md stage 3/4 for the full design intent.
+Uses rapidfuzz's token_sort_ratio, which tokenizes and sorts each name
+before comparing, so it isn't thrown off by reordering (e.g. "Bramholt,
+Viktor" vs "Viktor Bramholt") the way a plain character-sequence match
+would be. See ARCHITECTURE.md stage 3/4 for the full design intent.
 """
 
 import json
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import TypedDict
+
+from rapidfuzz import fuzz, utils
 
 WATCHLIST_PATH = Path(__file__).resolve().parent.parent / "data" / "mock_watchlist.json"
 
@@ -24,7 +27,7 @@ class ScreeningResult(TypedDict):
 
 
 def _similarity(a: str, b: str) -> float:
-    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+    return fuzz.token_sort_ratio(a, b, processor=utils.default_process) / 100.0
 
 
 def screen_name(name: str, path: Path = WATCHLIST_PATH) -> ScreeningResult:
