@@ -4,6 +4,26 @@ Basic instructions for running the backend and frontend locally. See
 [`README.md`](./README.md) for the project overview and
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the pipeline design.
 
+## Environment Variables
+
+Copy the template and fill in real values:
+
+```bash
+cp .env.example .env
+```
+
+Currently used:
+
+| Variable | Purpose |
+|---|---|
+| `LANGFUSE_PUBLIC_KEY` | Langfuse project public key (observability/tracing) |
+| `LANGFUSE_SECRET_KEY` | Langfuse project secret key |
+| `LANGFUSE_HOST` | Langfuse instance URL - `http://localhost:3000` for the local self-hosted stack (see `docker-compose.langfuse.yml`) |
+
+Get the Langfuse key pair from the Langfuse UI (`http://localhost:3000`,
+once the stack from `docker-compose.langfuse.yml` is running) under
+**Settings → API Keys** for your project.
+
 ## Backend (Python/FastAPI)
 
 Requires Python 3.12+.

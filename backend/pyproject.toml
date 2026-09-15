@@ -15,6 +15,7 @@ dependencies = [
     "sentence-transformers",
     "rapidfuzz",
     "scikit-learn",
+    "python-dotenv",
     # Pinned: langchain-community>=0.4.2 dropped the vertexai chat-model shim
     # that ragas 0.4.3 still imports unconditionally, which breaks `import
     # ragas`. Unpin once ragas releases a fix.

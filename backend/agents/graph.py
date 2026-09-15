@@ -3,10 +3,20 @@
 Wires the 5 stages together as a LangGraph graph. Entity resolution is folded
 into the screening stage for this thin slice (both operate on customer_name);
 see ARCHITECTURE.md for the full 8-stage pipeline this will grow into.
+
+Traced with Langfuse via langfuse.langchain.CallbackHandler, passed to
+ainvoke's config - LangGraph's compiled graph is a LangChain Runnable, so
+each node executes as its own traced step under one trace per invocation,
+without needing to instrument every node function individually. Credentials
+(LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY/LANGFUSE_HOST) are read from the
+environment; see .env.example.
 """
 
 from typing import NotRequired, TypedDict, cast
 
+from dotenv import load_dotenv
+from langfuse import get_client
+from langfuse.langchain import CallbackHandler
 from langgraph.graph import END, StateGraph
 
 from agents.decisioning import decide
@@ -15,6 +25,8 @@ from agents.retrieval import PolicyChunk, retrieve_policy_chunks
 from agents.screening import ScreeningResult, screen_name
 from agents.scoring import RiskScore, score_case
 from data.schema import Case
+
+load_dotenv()
 
 
 class PipelineState(TypedDict):
@@ -79,4 +91,14 @@ def build_graph():
 
 async def run_pipeline(case_id: str) -> PipelineState:
     app = build_graph()
-    return await app.ainvoke({"case_id": case_id})
+    langfuse_handler = CallbackHandler()
+    try:
+        return await app.ainvoke(
+            {"case_id": case_id},
+            config={"callbacks": [langfuse_handler], "run_name": f"case-{case_id}"},
+        )
+    finally:
+        # Flush explicitly: this is a short-lived script, and the OTel
+        # exporter batches spans in the background rather than sending them
+        # synchronously per node.
+        get_client().flush()
