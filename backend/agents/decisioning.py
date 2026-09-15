@@ -7,10 +7,18 @@ combine into that tier). The ML/LLM-based judgment for nuanced cases (see
 ARCHITECTURE.md stage 7) beyond this is not yet implemented.
 """
 
+from typing import TypedDict
+
 from agents.retrieval import PolicyChunk
 from agents.screening import ScreeningResult
 from agents.scoring import RiskScore
 from data.schema import Case
+
+
+class Decision(TypedDict):
+    text: str
+    disposition: str
+    primary_citation: str
 
 
 def _format_citation(chunk: PolicyChunk) -> str:
@@ -42,8 +50,8 @@ def decide(
     screening_result: ScreeningResult,
     policy_chunks: list[PolicyChunk],
     risk_score: RiskScore,
-) -> str:
-    """Combines the screening result, retrieved policy chunks, and risk score into a decision string.
+) -> Decision:
+    """Combines the screening result, retrieved policy chunks, and risk score into a decision.
 
     Disposition is driven by risk_tier: "high" always escalates, regardless
     of whether that tier came from a screening match or a rule-based
@@ -51,7 +59,9 @@ def decide(
     citation in the rationale, but keeps the remaining retrieved chunks
     available as supporting citations (mitigating the retrieval ranking
     quality caveat noted in ARCHITECTURE.md by not relying on the top-1
-    result alone).
+    result alone). Returns disposition and primary_citation as separate
+    fields (not just embedded in the text) so the audit stage can record
+    them without re-deriving the same logic.
     """
     if not policy_chunks:
         raise ValueError("decide() requires at least one retrieved policy chunk to cite")
@@ -59,21 +69,27 @@ def decide(
     primary_citation = _format_citation(policy_chunks[0])
     supporting_citations = [_format_citation(chunk) for chunk in policy_chunks[1:]]
 
-    if risk_score["risk_tier"] == "high":
+    disposition = "ESCALATE" if risk_score["risk_tier"] == "high" else "CLEAR"
+
+    if disposition == "ESCALATE":
         reason = _escalation_reason(case, screening_result, risk_score)
-        decision = f"ESCALATE - {reason}. Policy: {primary_citation}"
+        text = f"ESCALATE - {reason}. Policy: {primary_citation}"
     else:
-        decision = (
+        text = (
             f"CLEAR - no sanctions/PEP match found for {case.customer_name}. "
             f"Policy: {primary_citation}"
         )
 
     if supporting_citations:
-        decision += " | Also considered: " + "; ".join(supporting_citations)
+        text += " | Also considered: " + "; ".join(supporting_citations)
 
-    decision += (
+    text += (
         f" | Risk Tier: {risk_score['risk_tier'].upper()} (score: {risk_score['risk_score']:.2f}, "
         f"rule: {risk_score['rule_tier']}, ml: {risk_score['ml_tier']})"
     )
 
-    return decision
+    return {
+        "text": text,
+        "disposition": disposition,
+        "primary_citation": primary_citation,
+    }
