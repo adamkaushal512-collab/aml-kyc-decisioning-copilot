@@ -10,15 +10,17 @@ ARCHITECTURE.md's stated hybrid design for stage 7, applied one stage earlier
 at the risk-scoring step.
 """
 
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from agents.screening import ScreeningResult
+from agents.screening import REVIEW_THRESHOLD, ScreeningResult
 from data.schema import Case
+
+Disposition = Literal["ESCALATE", "REVIEW", "CLEAR"]
 
 TIER_ORDER = ["low", "medium", "high"]
 
@@ -160,3 +162,22 @@ def score_case(case: Case, screening_result: ScreeningResult) -> RiskScore:
         "rule_tier": rule_tier,
         "ml_tier": ml_tier,
     }
+
+
+def determine_disposition(screening_result: ScreeningResult, risk_score: RiskScore) -> Disposition:
+    """Determines the case's final disposition - the single source of truth for both
+    retrieval.py (which document/clause to cite) and decisioning.py (the decision
+    text), so they can't silently diverge the way they did before the CASE-0004
+    citation-routing bug was fixed.
+
+    A HIGH risk tier always escalates, regardless of what drove it (sanctions
+    match, transaction-amount rule, or in principle the ML model alone) - a
+    REVIEW-band similarity score never overrides that. Only once risk_tier is
+    not HIGH does the 75-89% "standard analyst review" band (policy AML-014
+    clause 3) apply; below that is a genuine false positive (clause 4).
+    """
+    if risk_score["risk_tier"] == "high":
+        return "ESCALATE"
+    if screening_result["similarity"] >= REVIEW_THRESHOLD:
+        return "REVIEW"
+    return "CLEAR"

@@ -1,16 +1,17 @@
 """Policy retrieval stage: RAG over AML/KYC policy docs embedded in pgvector.
 
-Embeds a query derived from the case's actual escalation trigger, retrieves
-the top-k most similar chunks *within the policy document that trigger
-governs* (populated by scripts/load_policy_docs.py), and returns them for
-the decisioning stage to cite. Restricting retrieval to the governing
-document is a deliberate, deterministic guarantee - not left to embedding
-similarity alone - after a real citation/disposition mismatch surfaced in
-testing (a transaction-amount escalation cited the sanctions doc's "false
-positive" clause, because query selection only considered
-screening_result["matched"], not the actual trigger). See ARCHITECTURE.md's
-"Known Limitations" section for a within-document ranking-quality caveat
-that this filtering does not address.
+Embeds a query derived from the case's actual disposition trigger (via
+agents.scoring.determine_disposition - the same function decisioning.py
+uses, so the two can't silently diverge), retrieves the top-k most similar
+chunks *within the policy document that trigger governs* (populated by
+scripts/load_policy_docs.py), and returns them for the decisioning stage to
+cite. Restricting retrieval to the governing document is a deliberate,
+deterministic guarantee - not left to embedding similarity alone - after a
+real citation/disposition mismatch surfaced in testing (a transaction-amount
+escalation cited the sanctions doc's "false positive" clause, because query
+selection only considered screening_result["matched"], not the actual
+trigger). See ARCHITECTURE.md's "Known Limitations" section for a
+within-document ranking-quality caveat that this filtering does not address.
 """
 
 from typing import TypedDict
@@ -19,7 +20,7 @@ from pgvector.asyncpg import register_vector
 from sentence_transformers import SentenceTransformer
 
 from agents.screening import ScreeningResult
-from agents.scoring import RiskScore
+from agents.scoring import RiskScore, determine_disposition
 from db import get_connection
 
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
@@ -30,6 +31,9 @@ TRANSACTION_MONITORING_DOC = "05_transaction_monitoring_red_flags.md"
 
 MATCHED_QUERY = (
     "similarity score 90% or greater sanctions escalation mandatory review"
+)
+REVIEW_QUERY = (
+    "similarity score between 75 and 89 percent standard analyst review documented rationale"
 )
 NO_MATCH_QUERY = (
     "similarity score below 75% false positive normal processing no escalation required"
@@ -55,18 +59,21 @@ class PolicyChunk(TypedDict):
 
 
 def _select_query(screening_result: ScreeningResult, risk_score: RiskScore) -> tuple[str, str]:
-    """Selects the retrieval query and governing document from the actual escalation trigger.
+    """Selects the retrieval query and governing document from the case's disposition.
 
-    Mirrors decisioning.py's disposition/reason logic (risk_tier first, then
-    whether a sanctions match or the amount rule drove a "high" tier) so the
-    citation always comes from the document that actually explains the
-    outcome, not just whether a sanctions match occurred.
+    Uses determine_disposition() (shared with decisioning.py) so the citation
+    always comes from the document that actually explains the outcome,
+    rather than each stage independently re-deriving - and potentially
+    disagreeing on - what drove it.
     """
-    if risk_score["risk_tier"] != "high":
-        return NO_MATCH_QUERY, SANCTIONS_DOC
-    if screening_result["matched"]:
-        return MATCHED_QUERY, SANCTIONS_DOC
-    return AMOUNT_QUERY, TRANSACTION_MONITORING_DOC
+    disposition = determine_disposition(screening_result, risk_score)
+    if disposition == "ESCALATE":
+        if screening_result["matched"]:
+            return MATCHED_QUERY, SANCTIONS_DOC
+        return AMOUNT_QUERY, TRANSACTION_MONITORING_DOC
+    if disposition == "REVIEW":
+        return REVIEW_QUERY, SANCTIONS_DOC
+    return NO_MATCH_QUERY, SANCTIONS_DOC
 
 
 async def retrieve_policy_chunks(

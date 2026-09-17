@@ -14,9 +14,12 @@ from rapidfuzz import fuzz, utils
 
 WATCHLIST_PATH = Path(__file__).resolve().parent.parent / "data" / "mock_watchlist.json"
 
-# Aligned with the placeholder policy snippet in retrieval.py, which cites a
-# 90% similarity threshold for escalation.
+# Mirrors policy AML-014's three similarity tiers (clauses 2/3/4):
+# >= MATCH_THRESHOLD -> mandatory escalation (clause 2)
+# [REVIEW_THRESHOLD, MATCH_THRESHOLD) -> standard analyst review (clause 3)
+# < REVIEW_THRESHOLD -> false positive, normal processing (clause 4)
 MATCH_THRESHOLD = 0.90
+REVIEW_THRESHOLD = 0.75
 
 
 class ScreeningResult(TypedDict):

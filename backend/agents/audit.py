@@ -22,6 +22,8 @@ just the current decision per case:
 
 import json
 
+import asyncpg
+
 from agents.decisioning import Decision
 from agents.screening import ScreeningResult
 from agents.scoring import RiskScore
@@ -39,6 +41,17 @@ CREATE TABLE IF NOT EXISTS audit_log (
     disposition TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+"""
+
+# Defensive integrity check, distinct from Python's Disposition Literal type:
+# a typo'd disposition string should never be silently logged. Applied via
+# ALTER rather than a table-definition CHECK so it also backfills onto the
+# table created before REVIEW existed; guarded against re-running on an
+# existing table below.
+ADD_DISPOSITION_CHECK_SQL = """
+ALTER TABLE audit_log
+ADD CONSTRAINT audit_log_disposition_check
+CHECK (disposition IN ('ESCALATE', 'REVIEW', 'CLEAR'));
 """
 
 # Enforces the append-only invariant in Postgres itself: no UPDATE or DELETE
@@ -61,6 +74,10 @@ FOR EACH ROW EXECUTE FUNCTION audit_log_prevent_modification();
 
 async def _ensure_schema(conn) -> None:
     await conn.execute(CREATE_TABLE_SQL)
+    try:
+        await conn.execute(ADD_DISPOSITION_CHECK_SQL)
+    except asyncpg.exceptions.DuplicateObjectError:
+        pass  # constraint already exists from a prior run
     await conn.execute(CREATE_TRIGGER_FUNCTION_SQL)
     await conn.execute("DROP TRIGGER IF EXISTS audit_log_append_only ON audit_log;")
     await conn.execute(CREATE_TRIGGER_SQL)
