@@ -1,0 +1,56 @@
+# Local dev stack for the backend service: `docker compose up` gets you a
+# running FastAPI backend + a pgvector-enabled Postgres, no local Python,
+# Postgres, or pgvector install required.
+#
+# Separate from docker-compose.langfuse.yml (the self-hosted Langfuse
+# observability stack) - run that alongside this one if you want tracing.
+#
+# Note: this only starts the backend API and its database - it does not
+# seed policy_chunks. Once the stack is up, run:
+#   docker compose exec backend python scripts/load_policy_docs.py
+# to populate it (needs the source .md files in backend/data/policy_docs,
+# which are baked into the image).
+#
+# Explicit project name: without one, Compose derives it from the
+# directory name, which docker-compose.langfuse.yml would also do -
+# two stacks sharing a project name means services with the same name
+# (both define "postgres") collide and one silently replaces the other's
+# container. Learned this the hard way; don't remove this.
+name: aml-kyc-backend
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: aml_kyc_copilot
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aml_kyc_copilot
+    volumes:
+      - aml_kyc_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    # Not published to the host: only the backend service needs to reach
+    # it, over the compose network. Avoids clashing with a local Postgres
+    # (or docker-compose.langfuse.yml's own, remapped to 5433) on 5432.
+
+volumes:
+  aml_kyc_postgres_data:
+    driver: local

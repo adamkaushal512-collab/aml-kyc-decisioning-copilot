@@ -12,6 +12,15 @@
 # the host to langfuse-web (port 3000) and minio (port 9090) only. All other
 # components are bound to localhost (127.0.0.1) to only accept connections
 # from the local machine.
+#
+# Explicit project name: without one, Compose derives it from the
+# directory name - the same default docker-compose.yml (the backend
+# stack) would get, and both define a service named "postgres". That
+# collision let the backend stack silently replace this stack's postgres
+# container once already. Takes effect on the next full `down`/`up` of
+# this stack, not a running one - not applied retroactively here.
+name: aml-kyc-langfuse
+
 services:
   langfuse-worker:
     image: docker.langfuse.com/langfuse/langfuse-worker:4
