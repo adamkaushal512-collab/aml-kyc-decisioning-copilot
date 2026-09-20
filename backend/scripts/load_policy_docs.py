@@ -82,8 +82,12 @@ async def main() -> None:
 
     conn = await get_connection()
     try:
-        await register_vector(conn)
+        # create_table() runs CREATE EXTENSION IF NOT EXISTS vector, which
+        # must happen before register_vector() looks up the `vector` type -
+        # on a genuinely fresh database (e.g. a CI Postgres service
+        # container) the type doesn't exist until the extension is created.
         await create_table(conn)
+        await register_vector(conn)
         await conn.execute("TRUNCATE TABLE policy_chunks;")
 
         rows = [

@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  backend:
+    name: Backend (eval regression gate)
+    runs-on: ubuntu-latest
+
+    # pgvector/pgvector ships Postgres with the vector extension already
+    # installable - the same requirement as backend/db.py and
+    # scripts/load_policy_docs.py's `CREATE EXTENSION IF NOT EXISTS vector`.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aml_kyc_copilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Matches backend/db.py's env-var contract.
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: aml_kyc_copilot
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      # Optional: if this repo has an OPENAI_API_KEY secret configured,
+      # run_eval.py will pick it up and score RAGAS faithfulness/context
+      # precision for real instead of printing "N/A" - no workflow changes
+      # needed either way (see backend/scripts/run_eval.py).
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -e .
+
+      - name: Load policy docs into policy_chunks
+        working-directory: backend
+        run: python scripts/load_policy_docs.py
+
+      - name: Run golden-set evaluation (regression gate)
+        working-directory: backend
+        run: python scripts/run_eval.py
+
+  frontend:
+    name: Frontend (build check)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build

@@ -27,6 +27,11 @@ ground truth and reports:
 
 Usage: python scripts/run_eval.py
 
+Exit code doubles as a CI regression gate: exits 0 if decision accuracy and
+citation accuracy are both >= REQUIRED_ACCURACY (100% by default), exits 1
+otherwise. RAGAS scores are informational only and never affect the exit
+code, since they're not always computed (see below).
+
 RAGAS scoring requires OPENAI_API_KEY in the environment (it needs an LLM
 to judge faithfulness/context_precision - there's no way to compute these
 without one). Without it, decision accuracy, citation accuracy, and
@@ -52,6 +57,11 @@ from agents.scoring import score_case  # noqa: E402
 
 GOLDEN_SET_PATH = BACKEND_DIR / "data" / "golden_set.json"
 RAGAS_MODEL = "gpt-4o-mini"
+
+# CI regression gate: decision accuracy and citation accuracy must not drop
+# below this. RAGAS scores are informational only (see module docstring) and
+# don't gate the exit code, since they're not always computed.
+REQUIRED_ACCURACY = 1.0
 
 CITATION_CLAUSE_RE = re.compile(r"([\w.]+\.md)\s+clause\s+(\d+)")
 CHUNK_CLAUSE_NUMBER_RE = re.compile(r"^(\d+)\.")
@@ -161,10 +171,13 @@ def _print_table(results: list[dict]) -> None:
     print()
 
 
-def _print_aggregates(results: list[dict], ragas_enabled: bool) -> None:
+def _print_aggregates(results: list[dict], ragas_enabled: bool) -> tuple[float, float]:
+    """Prints the aggregate metrics and returns (decision_accuracy, citation_accuracy) as fractions."""
     n = len(results)
     n_disposition_correct = sum(r["disposition_match"] for r in results)
     n_citation_correct = sum(r["citation_match"] for r in results)
+    decision_accuracy = n_disposition_correct / n
+    citation_accuracy = n_citation_correct / n
 
     tp = fn = fp = tn = 0
     for r in results:
@@ -191,8 +204,8 @@ def _print_aggregates(results: list[dict], ragas_enabled: bool) -> None:
     catch_rate = n_actionable / len(true_positives) if true_positives else float("nan")
 
     print(f"Cases evaluated: {n}")
-    print(f"Overall decision accuracy: {n_disposition_correct / n:.1%} ({n_disposition_correct}/{n})")
-    print(f"Citation accuracy (doc + clause): {n_citation_correct / n:.1%} ({n_citation_correct}/{n})")
+    print(f"Overall decision accuracy: {decision_accuracy:.1%} ({n_disposition_correct}/{n})")
+    print(f"Citation accuracy (doc + clause): {citation_accuracy:.1%} ({n_citation_correct}/{n})")
 
     if ragas_enabled:
         faith_scores = [r["faithfulness"] for r in results if r["faithfulness"] is not None]
@@ -220,8 +233,11 @@ def _print_aggregates(results: list[dict], ragas_enabled: bool) -> None:
         f"disposition, not silently cleared)"
     )
 
+    return decision_accuracy, citation_accuracy
 
-async def main() -> None:
+
+async def main() -> int:
+    """Returns a process exit code: 0 if the regression gate passes, 1 if it fails."""
     cases = json.loads(GOLDEN_SET_PATH.read_text())
 
     faithfulness_metric, context_precision_metric = _try_build_ragas_metrics()
@@ -237,8 +253,18 @@ async def main() -> None:
     ]
 
     _print_table(results)
-    _print_aggregates(results, ragas_enabled)
+    decision_accuracy, citation_accuracy = _print_aggregates(results, ragas_enabled)
+
+    if decision_accuracy < REQUIRED_ACCURACY or citation_accuracy < REQUIRED_ACCURACY:
+        print(
+            f"\nFAILED: decision accuracy {decision_accuracy:.1%} or citation accuracy "
+            f"{citation_accuracy:.1%} is below the required {REQUIRED_ACCURACY:.0%}."
+        )
+        return 1
+
+    print(f"\nPASSED: decision accuracy and citation accuracy both meet the required {REQUIRED_ACCURACY:.0%}.")
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(asyncio.run(main()))
